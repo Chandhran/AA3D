@@ -125,10 +125,9 @@ namespace AA3D
             _imagePathBox = new TextBox {
                 Location   = new Point(pad, y),
                 Size       = new Size(w - 82, 24),
-                Text       = "",
-                PlaceholderText = "Browse for a floor plan image to upload to llama3.2-vision…",
+                Text       = "Browse for a floor plan image to upload to llama3.2-vision…",
                 BackColor  = Color.FromArgb(50, 50, 50),
-                ForeColor  = Color.FromArgb(200, 200, 200),
+                ForeColor  = Color.FromArgb(120, 120, 120),
                 Font       = new Font("Segoe UI", 8.5f),
                 BorderStyle= BorderStyle.FixedSingle,
                 ReadOnly   = true,
@@ -310,7 +309,10 @@ namespace AA3D
                 dlg.Title  = "Select Floor Plan / Elevation Image";
                 dlg.Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.gif|All Files|*.*";
                 if (dlg.ShowDialog() == DialogResult.OK)
-                    _imagePathBox.Text = dlg.FileName;
+                {
+                    _imagePathBox.Text      = dlg.FileName;
+                    _imagePathBox.ForeColor = Color.FromArgb(200, 200, 200);
+                }
             }
         }
 
