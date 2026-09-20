@@ -1,0 +1,117 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AA3D</AssemblyName>
+    <RootNamespace>AA3D</RootNamespace>
+    <Nullable>disable</Nullable>
+    <LangVersion>9</LangVersion>
+    <Optimize>true</Optimize>
+    <AssemblyTitle>AA3D — Local AI Architectural Generator V2</AssemblyTitle>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+    <Company>Architecture Atlas</Company>
+    <Copyright>Architecture Atlas 2025</Copyright>
+    <!-- Required for WinForms floating panel -->
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LOCAL BUILD — HintPath references to the Rhino 8 install.
+       Active when GITHUB_ACTIONS is NOT set to 'true'.
+       Adjust RhinoDir if Rhino 8 is installed to a non-default path.
+       ══════════════════════════════════════════════════════════════ -->
+  <PropertyGroup Condition=" '$(GITHUB_ACTIONS)' != 'true' ">
+    <RhinoDir Condition="'$(RhinoDir)'==''">C:\Program Files\Rhino 8\System</RhinoDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(GITHUB_ACTIONS)' != 'true' ">
+    <Reference Include="RhinoCommon">
+      <HintPath>$(RhinoDir)\RhinoCommon.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Grasshopper">
+      <HintPath>$(RhinoDir)\Grasshopper\Grasshopper.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="GH_IO">
+      <HintPath>$(RhinoDir)\Grasshopper\GH_IO.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       CI BUILD — NuGet PackageReference.
+       Active when the workflow passes /p:GITHUB_ACTIONS=true.
+       ExcludeAssets="runtime" keeps the DLLs out of the output
+       folder — Rhino provides them at runtime, same as Private=False.
+       ══════════════════════════════════════════════════════════════ -->
+  <ItemGroup Condition=" '$(GITHUB_ACTIONS)' == 'true' ">
+    <PackageReference Include="RhinoCommon" Version="8.0.24045.13001">
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Grasshopper" Version="8.0.24045.13001">
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- ── .NET Framework WinForms + core references (always present) ── -->
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <!-- ── NuGet packages (always present) ─────────────────────────── -->
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <!-- ── Source files ─────────────────────────────────────────────── -->
+  <ItemGroup>
+    <Compile Include="AA3DPlugin.cs" />
+    <Compile Include="AA3DComponent.cs" />
+    <Compile Include="AA3DWindow.cs" />
+    <Compile Include="OllamaClient.cs" />
+    <Compile Include="VisionClient.cs" />
+    <Compile Include="GeometryBuilder.cs" />
+    <Compile Include="OpeningLibrary.cs" />
+  </ItemGroup>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       POST-BUILD: copy .dll → .gha so Grasshopper loads it.
+       On a local build this also drops the file into the GH
+       Libraries folder for immediate testing.
+       On CI the workflow uploads it as an artifact.
+       ══════════════════════════════════════════════════════════════ -->
+  <Target Name="InstallGHA" AfterTargets="Build">
+    <PropertyGroup>
+      <GHLibs>$(APPDATA)\Grasshopper\Libraries</GHLibs>
+      <GhaOutput>$(OutputPath)$(AssemblyName).gha</GhaOutput>
+    </PropertyGroup>
+
+    <!-- Always rename .dll → .gha in the output folder -->
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFiles="$(GhaOutput)"
+          OverwriteReadOnlyFiles="true" />
+
+    <!-- Copy to GH Libraries only on a local (non-CI) build -->
+    <Copy SourceFiles="$(GhaOutput)"
+          DestinationFolder="$(GHLibs)"
+          OverwriteReadOnlyFiles="true"
+          Condition=" '$(GITHUB_ACTIONS)' != 'true' AND Exists('$(GHLibs)') " />
+
+    <Message Text="✅  AA3D.gha written to $(GhaOutput)" Importance="high" />
+    <Message Text="✅  Installed AA3D.gha to $(GHLibs)"
+             Importance="high"
+             Condition=" '$(GITHUB_ACTIONS)' != 'true' AND Exists('$(GHLibs)') " />
+  </Target>
+
+</Project>

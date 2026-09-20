@@ -1,0 +1,140 @@
+name: Build AA3D Grasshopper Plugin
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore AA3D.csproj -PackagesDirectory packages
+
+      - name: Build plugin
+        env:
+          GITHUB_ACTIONS: 'true'
+        run: |
+          msbuild AA3D.csproj `
+            /p:Configuration=Release `
+            /p:Platform="Any CPU" `
+            /p:GITHUB_ACTIONS=true `
+            /p:OutputPath=bin\Release\
+
+      - name: Rename output to .gha
+        shell: pwsh
+        run: |
+          $dll = Get-Item "bin\Release\AA3D.dll" -ErrorAction SilentlyContinue
+          if (-not $dll) {
+            $dll = Get-Item "bin\Release\AA3D*.dll" | Select-Object -First 1
+          }
+          if ($dll) {
+            $gha = $dll.FullName -replace '\.dll$', '.gha'
+            Copy-Item $dll.FullName $gha -Force
+            Write-Host "Created: $gha"
+          } else {
+            Write-Error "Could not find AA3D.dll in bin\Release\"
+            exit 1
+          }
+
+      - name: Verify artifact exists
+        shell: pwsh
+        run: |
+          $gha = Get-Item "bin\Release\AA3D.gha"
+          Write-Host "Artifact ready: $($gha.FullName) ($([math]::Round($gha.Length / 1KB, 1)) KB)"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AA3D-V2-GHA
+          path: bin\Release\AA3D.gha
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Write job summary
+        shell: pwsh
+        run: |
+          $gha = Get-Item "bin\Release\AA3D.gha"
+          $size = [math]::Round($gha.Length / 1KB, 1)
+          $sha = (Get-FileHash $gha.FullName -Algorithm SHA256).Hash.ToLower()
+          @"
+          ## AA3D Build Summary
+
+          | Field | Value |
+          |-------|-------|
+          | File | ``AA3D.gha`` |
+          | Size | ${size} KB |
+          | SHA-256 | ``$sha`` |
+          | Commit | ``${{ github.sha }}`` |
+          | Branch/Tag | ``${{ github.ref_name }}`` |
+
+          ### Install
+          1. Download ``AA3D.gha`` from the **Artifacts** section below.
+          2. Copy it to ``%AppData%\Grasshopper\Libraries\``
+          3. Restart Rhino 8 and open Grasshopper.
+          4. The **AA3D** tab will appear in the ribbon.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  release:
+    needs: build
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AA3D-V2-GHA
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AA3D ${{ github.ref_name }}
+          body: |
+            ## AA3D Grasshopper Plugin — ${{ github.ref_name }}
+
+            A Grasshopper plugin for Rhino 8 that generates architectural geometry
+            from natural language prompts via a local Ollama model.
+
+            ### Requirements
+            - Rhino 8 (Windows)
+            - Grasshopper (included with Rhino 8)
+            - [Ollama](https://ollama.com/) running locally with `qwen2.5-coder:14b`
+
+            ### Install
+            1. Download `AA3D.gha` below.
+            2. Copy it to `%AppData%\Grasshopper\Libraries\`
+            3. Restart Rhino 8 and open Grasshopper.
+            4. The **AA3D** component tab will appear.
+
+            ### Usage
+            Drop the **AA3D** component onto the canvas.
+            - **Prompt** — describe the building in plain English
+            - **Mode** — `full`, `walls`, `openings`, etc.
+            - **Run** — toggle to `True` to generate
+            - **Model** — Ollama model name (default `qwen2.5-coder:14b`)
+            - **Endpoint** — Ollama URL (default `http://localhost:11434/api/generate`)
+
+            See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md) for full instructions.
+          files: dist/AA3D.gha
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
